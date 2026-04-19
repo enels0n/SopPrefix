@@ -1,0 +1,541 @@
+package net.enelson.sopprefix.gui;
+
+import net.enelson.sopprefix.prefix.FormatDefinition;
+import net.enelson.sopprefix.prefix.PrefixCategory;
+import net.enelson.sopprefix.prefix.PrefixDefinition;
+import net.enelson.sopprefix.prefix.PrefixManager;
+import net.enelson.sopprefix.prefix.SegmentSide;
+import net.enelson.sopprefix.prefix.TagSegment;
+import net.enelson.sopprefix.util.Text;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public final class SuffixMenuService {
+
+    private static final int PAGE_SIZE = 21;
+
+    private final PrefixManager prefixManager;
+    private final List<Integer> entrySlots = Arrays.asList(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34);
+
+    public SuffixMenuService(PrefixManager prefixManager) {
+        this.prefixManager = prefixManager;
+    }
+
+    public void openMainMenu(Player player) {
+        Inventory inventory = Bukkit.createInventory(new SuffixMenuHolder(SuffixMenuType.MAIN, null, null, 0, false), 45, this.prefixManager.getMainMenuTitle(SegmentSide.SUFFIX));
+        fillBorders(inventory);
+        for (TagSegment segment : this.prefixManager.getEditableSegments(SegmentSide.SUFFIX)) {
+            placeMainSegmentButtons(player, inventory, segment);
+        }
+        inventory.setItem(4, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "preview",
+                Material.BOOK,
+                "&fPreview",
+                Collections.singletonList("%preview%"),
+                previewReplacements(player)
+        ));
+        player.openInventory(inventory);
+    }
+
+    public void openCategoryListMenu(Player player, String segmentId, int page) {
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (segment == null) {
+            return;
+        }
+        Inventory inventory = Bukkit.createInventory(new SuffixMenuHolder(SuffixMenuType.CATEGORY_LIST, segmentId, null, page, false), 45, Text.color("&8Categories: " + segment.getName()));
+        fillBorders(inventory);
+        inventory.setItem(36, createBackItem(player, segment));
+
+        List<PrefixCategory> categories = new ArrayList<PrefixCategory>(this.prefixManager.getCategoriesForSegment(segmentId));
+        fillPagedEntries(inventory, page, categories, new EntryRenderer<PrefixCategory>() {
+            @Override
+            public ItemStack render(PrefixCategory value) {
+                return prefixManager.createCategoryItem(player, value, segmentId);
+            }
+        });
+        placePageControls(player, inventory, page, categories.size());
+        player.openInventory(inventory);
+    }
+
+    public void openTextMenu(Player player, String segmentId, String categoryId, int page, boolean availableOnly) {
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        PrefixCategory category = this.prefixManager.getCategory(categoryId);
+        if (segment == null || category == null) {
+            player.sendMessage(this.prefixManager.getMessage("category-empty"));
+            return;
+        }
+        Inventory inventory = Bukkit.createInventory(new SuffixMenuHolder(SuffixMenuType.TEXT, segmentId, categoryId, page, availableOnly), 45, this.prefixManager.getCategoryMenuTitle(segment, category));
+        fillBorders(inventory);
+        inventory.setItem(36, createBackItem(player, segment));
+        inventory.setItem(38, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "clear-text",
+                Material.BARRIER,
+                "&cClear text",
+                Arrays.asList("&7Clears the selected text.", "", "&eLeft click: clear"),
+                segmentReplacements(player, segment)
+        ));
+        inventory.setItem(40, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "random-text",
+                Material.SUNFLOWER,
+                "&6Random text",
+                Arrays.asList("&7Selects a random available text.", "", "&eLeft click: choose"),
+                segmentReplacements(player, segment)
+        ));
+        inventory.setItem(42, this.prefixManager.createConfiguredMenuItem(
+                player,
+                availableOnly ? "available-toggle-on" : "available-toggle-off",
+                availableOnly ? Material.LIME_DYE : Material.HOPPER,
+                availableOnly ? "&aAvailable only" : "&fAll variants",
+                Arrays.asList(availableOnly ? "&7Unavailable variants are hidden." : "&7All variants are visible.", "", "&eLeft click: toggle"),
+                segmentReplacements(player, segment)
+        ));
+
+        List<PrefixDefinition> values = availableOnly ? this.prefixManager.getAvailableDefinitions(player, segmentId) : this.prefixManager.getDefinitionsByCategory(segmentId, categoryId);
+        if (availableOnly) {
+            java.util.Iterator<PrefixDefinition> iterator = values.iterator();
+            while (iterator.hasNext()) {
+                PrefixDefinition definition = iterator.next();
+                if (!definition.getCategoryId().equalsIgnoreCase(categoryId)) {
+                    iterator.remove();
+                }
+            }
+        }
+        fillPagedEntries(inventory, page, values, new EntryRenderer<PrefixDefinition>() {
+            @Override
+            public ItemStack render(PrefixDefinition value) {
+                return prefixManager.createDefinitionItem(player, value);
+            }
+        });
+        placePageControls(player, inventory, page, values.size());
+        player.openInventory(inventory);
+    }
+
+    public void openFormatMenu(Player player, String segmentId, int page, boolean availableOnly) {
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (segment == null) {
+            return;
+        }
+        Inventory inventory = Bukkit.createInventory(new SuffixMenuHolder(SuffixMenuType.FORMAT, segmentId, null, page, availableOnly), 45, this.prefixManager.getFormatMenuTitle(segment));
+        fillBorders(inventory);
+        inventory.setItem(36, createBackItem(player, segment));
+        inventory.setItem(38, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "clear-format",
+                Material.BARRIER,
+                "&cClear format",
+                Arrays.asList("&7Returns the default format.", "", "&eLeft click: clear"),
+                segmentReplacements(player, segment)
+        ));
+        inventory.setItem(40, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "random-format",
+                Material.SUNFLOWER,
+                "&6Random format",
+                Arrays.asList("&7Selects a random available format.", "", "&eLeft click: choose"),
+                segmentReplacements(player, segment)
+        ));
+        inventory.setItem(42, this.prefixManager.createConfiguredMenuItem(
+                player,
+                availableOnly ? "available-toggle-on" : "available-toggle-off",
+                availableOnly ? Material.LIME_DYE : Material.HOPPER,
+                availableOnly ? "&aAvailable only" : "&fAll variants",
+                Arrays.asList(availableOnly ? "&7Unavailable formats are hidden." : "&7All formats are visible.", "", "&eLeft click: toggle"),
+                segmentReplacements(player, segment)
+        ));
+
+        List<FormatDefinition> values = availableOnly ? this.prefixManager.getAvailableFormats(player, segmentId) : getAllFormats(segmentId);
+        fillPagedEntries(inventory, page, values, new EntryRenderer<FormatDefinition>() {
+            @Override
+            public ItemStack render(FormatDefinition value) {
+                return prefixManager.createFormatItem(player, segmentId, value);
+            }
+        });
+        placePageControls(player, inventory, page, values.size());
+        player.openInventory(inventory);
+    }
+
+    public void closeAll() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof SuffixMenuHolder) {
+                player.closeInventory();
+            }
+        }
+    }
+
+    public void handleClick(Player player, SuffixMenuHolder holder, int rawSlot, boolean rightClick, boolean shiftClick) {
+        if (holder.getType() == SuffixMenuType.MAIN) {
+            handleMainClick(player, rawSlot, rightClick, shiftClick);
+            return;
+        }
+        if (holder.getType() == SuffixMenuType.CATEGORY_LIST) {
+            handleCategoryListClick(player, holder.getSegmentId(), holder.getPage(), rawSlot);
+            return;
+        }
+        if (holder.getType() == SuffixMenuType.TEXT) {
+            handleTextClick(player, holder.getSegmentId(), holder.getCategoryId(), holder.getPage(), holder.isAvailableOnly(), rawSlot);
+            return;
+        }
+        handleFormatClick(player, holder.getSegmentId(), holder.getPage(), holder.isAvailableOnly(), rawSlot);
+    }
+
+    private void handleMainClick(Player player, int rawSlot, boolean rightClick, boolean shiftClick) {
+        for (TagSegment segment : this.prefixManager.getEditableSegments(SegmentSide.SUFFIX)) {
+            int textSlot = segment.getMenuSlot();
+            int formatSlot = segment.getFormatMenuSlot();
+            if (rawSlot != textSlot && rawSlot != formatSlot) {
+                continue;
+            }
+            if (shiftClick && rightClick) {
+                this.prefixManager.clearActiveFormat(player, segment.getId());
+                player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("format-cleared"), Collections.singletonMap("%segment%", segment.getName())));
+                openMainMenu(player);
+                return;
+            }
+            if (shiftClick) {
+                this.prefixManager.clearActiveText(player, segment.getId());
+                player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("text-cleared"), Collections.singletonMap("%segment%", segment.getName())));
+                openMainMenu(player);
+                return;
+            }
+            if (rawSlot == formatSlot || rightClick) {
+                if (!this.prefixManager.hasActiveText(player, segment.getId())) {
+                    player.sendMessage(this.prefixManager.getMessage("select-text-first"));
+                    return;
+                }
+                openFormatMenu(player, segment.getId(), 0, false);
+                return;
+            }
+            openCategoryListMenu(player, segment.getId(), 0);
+            return;
+        }
+    }
+
+    private void placeMainSegmentButtons(Player player, Inventory inventory, TagSegment segment) {
+        PrefixDefinition activeText = this.prefixManager.getActiveText(player, segment.getId());
+        FormatDefinition activeFormat = this.prefixManager.getActiveFormat(player, segment.getId());
+        Map<String, String> replacements = segmentReplacements(player, segment);
+        replacements.put("%current_text%", activeText == null ? this.prefixManager.getMenuString("value-none", "&7Not selected") : activeText.getValue());
+        replacements.put("%current_format%", activeFormat == null ? this.prefixManager.getMenuString("value-default-format", "&7Default") : Text.color(activeFormat.getDisplayName()));
+        replacements.put("%format_state%", activeText == null ? this.prefixManager.getMenuString("format-locked", "&cSelect text first") : this.prefixManager.getMenuString("format-open", "&eLeft click: choose format"));
+        if (segment.hasCustomButtonAppearance()) {
+            inventory.setItem(segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+                    player,
+                    "__unused_segment_text_button__",
+                    segment.getButtonMaterialSpec(),
+                    Material.PAPER,
+                    segment.getButtonName() == null ? segment.getName() : segment.getButtonName(),
+                    segment.getButtonLore().isEmpty()
+                            ? Arrays.asList("&7Text: &f%current_text%", "&7Preview:", "%preview%", "", "&eLeft click: choose text", "&cShift+Left click: clear text")
+                            : segment.getButtonLore(),
+                    replacements,
+                    segment.getLore()
+            ));
+        } else {
+            inventory.setItem(segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+                    player,
+                    "segment-text-button",
+                    segment.getButtonMaterialSpec(),
+                    Material.PAPER,
+                    segment.getName(),
+                    Arrays.asList("&7Text: &f%current_text%", "&7Preview:", "%preview%", "", "&eLeft click: choose text", "&cShift+Left click: clear text"),
+                    replacements,
+                    segment.getLore()
+            ));
+        }
+        if (segment.hasCustomFormatButtonAppearance()) {
+            inventory.setItem(segment.getFormatMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+                    player,
+                    "__unused_segment_format_button__",
+                    segment.getFormatButtonMaterialSpec(),
+                    activeText == null ? Material.GRAY_DYE : Material.INK_SAC,
+                    segment.getFormatButtonName() == null ? "&6Format: " + segment.getName() : segment.getFormatButtonName(),
+                    segment.getFormatButtonLore().isEmpty()
+                            ? Arrays.asList("&7Format: &f%current_format%", "%format_state%", activeText == null ? "&8Unavailable" : "%preview%", "", activeText == null ? "&cLeft click: unavailable" : "&eLeft click: choose format", "&cShift+Left click: clear format")
+                            : segment.getFormatButtonLore(),
+                    replacements,
+                    segment.getLore()
+            ));
+        } else {
+            inventory.setItem(segment.getFormatMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+                    player,
+                    "segment-format-button",
+                    segment.getFormatButtonMaterialSpec(),
+                    activeText == null ? Material.GRAY_DYE : Material.INK_SAC,
+                    "&6Format: " + segment.getName(),
+                    Arrays.asList("&7Format: &f%current_format%", "%format_state%", activeText == null ? "&8Unavailable" : "%preview%", "", activeText == null ? "&cLeft click: unavailable" : "&eLeft click: choose format", "&cShift+Left click: clear format"),
+                    replacements,
+                    segment.getLore()
+            ));
+        }
+    }
+
+    private void handleCategoryListClick(Player player, String segmentId, int page, int rawSlot) {
+        List<PrefixCategory> categories = new ArrayList<PrefixCategory>(this.prefixManager.getCategoriesForSegment(segmentId));
+        if (rawSlot == 36) {
+            openMainMenu(player);
+            return;
+        }
+        if (rawSlot == 37 && page > 0) {
+            openCategoryListMenu(player, segmentId, page - 1);
+            return;
+        }
+        if (rawSlot == 43 && hasNextPage(categories.size(), page)) {
+            openCategoryListMenu(player, segmentId, page + 1);
+            return;
+        }
+
+        int index = getEntryIndex(page, rawSlot);
+        if (index < 0 || index >= categories.size()) {
+            return;
+        }
+        openTextMenu(player, segmentId, categories.get(index).getId(), 0, false);
+    }
+
+    private void handleTextClick(Player player, String segmentId, String categoryId, int page, boolean availableOnly, int rawSlot) {
+        List<PrefixDefinition> values = availableOnly ? this.prefixManager.getAvailableDefinitions(player, segmentId) : this.prefixManager.getDefinitionsByCategory(segmentId, categoryId);
+        if (availableOnly) {
+            java.util.Iterator<PrefixDefinition> iterator = values.iterator();
+            while (iterator.hasNext()) {
+                PrefixDefinition definition = iterator.next();
+                if (!definition.getCategoryId().equalsIgnoreCase(categoryId)) {
+                    iterator.remove();
+                }
+            }
+        }
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (rawSlot == 36) {
+            openCategoryListMenu(player, segmentId, 0);
+            return;
+        }
+        if (rawSlot == 38) {
+            this.prefixManager.clearActiveText(player, segmentId);
+            player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("text-cleared"), Collections.singletonMap("%segment%", segment.getName())));
+            openTextMenu(player, segmentId, categoryId, page, availableOnly);
+            return;
+        }
+        if (rawSlot == 40) {
+            PrefixDefinition random = this.prefixManager.setRandomText(player, segmentId);
+            if (random == null) {
+                player.sendMessage(this.prefixManager.getMessage("no-texts"));
+            } else {
+                player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("text-set"), replacements(segment.getName(), random.getValue())));
+            }
+            openTextMenu(player, segmentId, categoryId, page, availableOnly);
+            return;
+        }
+        if (rawSlot == 42) {
+            openTextMenu(player, segmentId, categoryId, 0, !availableOnly);
+            return;
+        }
+        if (rawSlot == 37 && page > 0) {
+            openTextMenu(player, segmentId, categoryId, page - 1, availableOnly);
+            return;
+        }
+        if (rawSlot == 43 && hasNextPage(values.size(), page)) {
+            openTextMenu(player, segmentId, categoryId, page + 1, availableOnly);
+            return;
+        }
+
+        int index = getEntryIndex(page, rawSlot);
+        if (index < 0 || index >= values.size()) {
+            return;
+        }
+        PrefixDefinition definition = values.get(index);
+        if (!this.prefixManager.setActiveText(player, segmentId, definition.getId())) {
+            player.sendMessage(this.prefixManager.getMessage("text-not-available"));
+            return;
+        }
+        player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("text-set"), replacements(segment.getName(), definition.getValue())));
+        openTextMenu(player, segmentId, categoryId, page, availableOnly);
+    }
+
+    private void handleFormatClick(Player player, String segmentId, int page, boolean availableOnly, int rawSlot) {
+        List<FormatDefinition> values = availableOnly ? this.prefixManager.getAvailableFormats(player, segmentId) : getAllFormats(segmentId);
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (rawSlot == 36) {
+            openMainMenu(player);
+            return;
+        }
+        if (rawSlot == 38) {
+            this.prefixManager.clearActiveFormat(player, segmentId);
+            player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("format-cleared"), Collections.singletonMap("%segment%", segment.getName())));
+            openFormatMenu(player, segmentId, page, availableOnly);
+            return;
+        }
+        if (rawSlot == 40) {
+            FormatDefinition random = this.prefixManager.setRandomFormat(player, segmentId);
+            if (random == null) {
+                player.sendMessage(this.prefixManager.getMessage("no-formats"));
+            } else {
+                player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("format-set"), replacements(segment.getName(), random.getDisplayName())));
+            }
+            openFormatMenu(player, segmentId, page, availableOnly);
+            return;
+        }
+        if (rawSlot == 42) {
+            openFormatMenu(player, segmentId, 0, !availableOnly);
+            return;
+        }
+        if (rawSlot == 37 && page > 0) {
+            openFormatMenu(player, segmentId, page - 1, availableOnly);
+            return;
+        }
+        if (rawSlot == 43 && hasNextPage(values.size(), page)) {
+            openFormatMenu(player, segmentId, page + 1, availableOnly);
+            return;
+        }
+
+        int index = getEntryIndex(page, rawSlot);
+        if (index < 0 || index >= values.size()) {
+            return;
+        }
+        FormatDefinition definition = values.get(index);
+        if (!this.prefixManager.setActiveFormat(player, segmentId, definition.getId())) {
+            player.sendMessage(this.prefixManager.getMessage("format-not-available"));
+            return;
+        }
+        player.sendMessage(this.prefixManager.format(this.prefixManager.getMessage("format-set"), replacements(segment.getName(), definition.getDisplayName())));
+        openFormatMenu(player, segmentId, page, availableOnly);
+    }
+
+    private List<FormatDefinition> getAllFormats(String segmentId) {
+        List<FormatDefinition> result = new ArrayList<FormatDefinition>();
+        for (String id : this.prefixManager.getFormatIds(segmentId)) {
+            FormatDefinition definition = this.prefixManager.getFormatDefinition(segmentId, id);
+            if (definition != null) {
+                result.add(definition);
+            }
+        }
+        return result;
+    }
+
+    private Map<String, String> replacements(String segment, String value) {
+        Map<String, String> map = new LinkedHashMap<String, String>();
+        map.put("%segment%", segment);
+        map.put("%value%", value == null ? "" : value);
+        return map;
+    }
+
+    private Map<String, String> previewReplacements(Player player) {
+        Map<String, String> replacements = new LinkedHashMap<String, String>();
+        replacements.put("%preview%", this.prefixManager.getPreview(player));
+        return replacements;
+    }
+
+    private Map<String, String> segmentReplacements(Player player, TagSegment segment) {
+        Map<String, String> replacements = new LinkedHashMap<String, String>();
+        replacements.put("%segment%", segment.getName());
+        replacements.put("%preview%", this.prefixManager.getPreview(player));
+        return replacements;
+    }
+
+    private ItemStack createBackItem(Player player, TagSegment segment) {
+        Map<String, String> replacements = new LinkedHashMap<String, String>();
+        replacements.put("%segment%", segment == null ? "" : segment.getName());
+        return this.prefixManager.createConfiguredMenuItem(
+                player,
+                "back",
+                Material.ARROW,
+                "&eBack",
+                Arrays.asList("&7Return to previous menu.", "", "&eLeft click: back"),
+                replacements
+        );
+    }
+
+    private void fillBorders(Inventory inventory) {
+        ItemStack filler = this.prefixManager.createConfiguredMenuItem(
+                "filler",
+                Material.BLACK_STAINED_GLASS_PANE,
+                " ",
+                Collections.<String>emptyList(),
+                Collections.<String, String>emptyMap()
+        );
+        for (int i = 0; i < inventory.getSize(); i++) {
+            if (i < 9 || i >= 36 || i % 9 == 0 || i % 9 == 8) {
+                inventory.setItem(i, filler);
+            }
+        }
+    }
+
+    private void fillPagedEntries(Inventory inventory, int page, List<?> values, EntryRenderer<?> renderer) {
+        int start = page * PAGE_SIZE;
+        for (int i = 0; i < PAGE_SIZE; i++) {
+            int index = start + i;
+            if (index >= values.size()) {
+                break;
+            }
+            inventory.setItem(this.entrySlots.get(i), render(renderer, values.get(index)));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> ItemStack render(EntryRenderer<?> renderer, Object value) {
+        return ((EntryRenderer<T>) renderer).render((T) value);
+    }
+
+    private void placePageControls(Player player, Inventory inventory, int page, int totalEntries) {
+        int maxPage = totalEntries == 0 ? 0 : (totalEntries - 1) / PAGE_SIZE;
+        Map<String, String> replacements = new LinkedHashMap<String, String>();
+        replacements.put("%page%", String.valueOf(page + 1));
+        replacements.put("%max_page%", String.valueOf(maxPage + 1));
+        replacements.put("%previous_page%", String.valueOf(page));
+        replacements.put("%next_page%", String.valueOf(page + 2));
+        inventory.setItem(41, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "page-info",
+                Material.BOOK,
+                "&fPage",
+                Collections.singletonList("&7%page%&f/&7%max_page%"),
+                replacements
+        ));
+        if (page > 0) {
+            inventory.setItem(37, this.prefixManager.createConfiguredMenuItem(
+                    player,
+                    "previous-page",
+                    Material.ARROW,
+                    "&ePrevious",
+                    Arrays.asList("&7Return to page %previous_page%.", "", "&eLeft click: back"),
+                    replacements
+            ));
+        }
+        if (hasNextPage(totalEntries, page)) {
+            inventory.setItem(43, this.prefixManager.createConfiguredMenuItem(
+                    player,
+                    "next-page",
+                    Material.ARROW,
+                    "&eNext",
+                    Arrays.asList("&7Go to page %next_page%.", "", "&eLeft click: next"),
+                    replacements
+            ));
+        }
+    }
+
+    private boolean hasNextPage(int totalEntries, int page) {
+        return (page + 1) * PAGE_SIZE < totalEntries;
+    }
+
+    private int getEntryIndex(int page, int rawSlot) {
+        int slotIndex = this.entrySlots.indexOf(rawSlot);
+        if (slotIndex < 0) {
+            return -1;
+        }
+        return page * PAGE_SIZE + slotIndex;
+    }
+
+    private interface EntryRenderer<T> {
+        ItemStack render(T value);
+    }
+}
