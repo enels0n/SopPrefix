@@ -3,7 +3,7 @@ main: net.enelson.sopprefix.SopPrefixPlugin
 version: ${project.version}
 api-version: 1.16
 depend: [LuckPerms, SopLib]
-softdepend: [PlaceholderAPI]
+softdepend: [PlaceholderAPI, SopEmojis]
 
 commands:
   prefix:
