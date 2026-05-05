@@ -258,7 +258,7 @@ segments:
     toggleable: true
     default-visible: false
     name: '&fGroup Prefix'
-    menu-slot: 19
+    menu-slot: 20
     source: placeholder
     separator-content: true
     value: '%luckperms_meta_group-prefix-clear%'
@@ -266,7 +266,7 @@ segments:
     side: prefix
     editable: true
     name: '&fПрефикс'
-    menu-slot: 21
+    menu-slot: 22
     material: NAME_TAG
 
     button-material: NAME_TAG
@@ -282,7 +282,7 @@ segments:
       - '&eЛКМ: выбрать префикс'
       - '&cShift+ЛКМ: очистить префикс'
 
-    format-menu-slot: 23
+    format-menu-slot: 24
     format-button-material: 'HEAD:eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvN2E3ZDZjMGFjY2QyZTljY2FlZmE5NmI5NDM4ZDZlMjAyZmVjNzk1YWNmNzA3MmJjZmQ5Y2Q5ZDRiNWEzMmIwZSJ9fX0='
     format-button-name: '&fФормат префикса'
     format-button-lore:
@@ -328,8 +328,8 @@ segments:
     side: suffix
     editable: true
     name: '&fСуффикс: знак'
-    menu-slot: 24
-    format-menu-slot: 25
+    menu-slot: 23
+    format-menu-slot: 24
     material: NETHER_STAR
     text-section: suffix-icon-texts
     format-section: suffix-icon-formats

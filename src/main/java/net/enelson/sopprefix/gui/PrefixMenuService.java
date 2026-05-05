@@ -12,6 +12,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,18 +34,7 @@ public final class PrefixMenuService {
 
     public void openMainMenu(Player player) {
         Inventory inventory = Bukkit.createInventory(new PrefixMenuHolder(MenuType.MAIN, null, null, 0, false), 45, this.prefixManager.getMainMenuTitle(SegmentSide.PREFIX));
-        fillBorders(inventory);
-        for (TagSegment segment : this.prefixManager.getMainMenuSegments(SegmentSide.PREFIX)) {
-            placeMainSegmentButtons(player, inventory, segment);
-        }
-        inventory.setItem(4, this.prefixManager.createConfiguredMenuItem(
-                player,
-                "preview",
-                Material.BOOK,
-                "&fPreview",
-                Collections.singletonList("%preview%"),
-                previewReplacements(player)
-        ));
+        renderMenu(player, inventory, (PrefixMenuHolder) inventory.getHolder(), true);
         player.openInventory(inventory);
     }
 
@@ -54,17 +44,7 @@ public final class PrefixMenuService {
             return;
         }
         Inventory inventory = Bukkit.createInventory(new PrefixMenuHolder(MenuType.CATEGORY_LIST, segmentId, null, page, false), 45, Text.color("&8Categories: " + segment.getName()));
-        fillBorders(inventory);
-        inventory.setItem(36, createBackItem(player, segment));
-
-        List<PrefixCategory> categories = new ArrayList<PrefixCategory>(this.prefixManager.getCategoriesForSegment(segmentId));
-        fillPagedEntries(inventory, page, categories, new EntryRenderer<PrefixCategory>() {
-            @Override
-            public ItemStack render(PrefixCategory value) {
-                return prefixManager.createCategoryItem(player, value, segmentId);
-            }
-        });
-        placePageControls(player, inventory, page, categories.size());
+        renderMenu(player, inventory, (PrefixMenuHolder) inventory.getHolder(), true);
         player.openInventory(inventory);
     }
 
@@ -76,52 +56,7 @@ public final class PrefixMenuService {
             return;
         }
         Inventory inventory = Bukkit.createInventory(new PrefixMenuHolder(MenuType.TEXT, segmentId, categoryId, page, availableOnly), 45, this.prefixManager.getCategoryMenuTitle(segment, category));
-        fillBorders(inventory);
-        inventory.setItem(36, createBackItem(player, segment));
-        inventory.setItem(38, this.prefixManager.createConfiguredMenuItem(
-                player,
-                "clear-text",
-                Material.BARRIER,
-                "&cClear text",
-                Arrays.asList("&7Clears the selected text.", "", "&eLeft click: clear"),
-                segmentReplacements(player, segment)
-        ));
-        inventory.setItem(40, this.prefixManager.createConfiguredMenuItem(
-                player,
-                "random-text",
-                Material.SUNFLOWER,
-                "&6Random text",
-                Arrays.asList("&7Selects a random available text.", "", "&eLeft click: choose"),
-                segmentReplacements(player, segment)
-        ));
-        inventory.setItem(42, this.prefixManager.createConfiguredMenuItem(
-                player,
-                availableOnly ? "available-toggle-on" : "available-toggle-off",
-                availableOnly ? Material.LIME_DYE : Material.HOPPER,
-                availableOnly ? "&aAvailable only" : "&fAll variants",
-                Arrays.asList(availableOnly ? "&7Unavailable variants are hidden." : "&7All variants are visible.", "", "&eLeft click: toggle"),
-                segmentReplacements(player, segment)
-        ));
-
-        List<PrefixDefinition> values = availableOnly
-                ? this.prefixManager.getAvailableDefinitions(player, segmentId)
-                : this.prefixManager.getDefinitionsByCategory(segmentId, categoryId);
-        if (availableOnly) {
-            java.util.Iterator<PrefixDefinition> iterator = values.iterator();
-            while (iterator.hasNext()) {
-                PrefixDefinition definition = iterator.next();
-                if (!definition.getCategoryId().equalsIgnoreCase(categoryId)) {
-                    iterator.remove();
-                }
-            }
-        }
-        fillPagedEntries(inventory, page, values, new EntryRenderer<PrefixDefinition>() {
-            @Override
-            public ItemStack render(PrefixDefinition value) {
-                return prefixManager.createDefinitionItem(player, value);
-            }
-        });
-        placePageControls(player, inventory, page, values.size());
+        renderMenu(player, inventory, (PrefixMenuHolder) inventory.getHolder(), true);
         player.openInventory(inventory);
     }
 
@@ -131,43 +66,7 @@ public final class PrefixMenuService {
             return;
         }
         Inventory inventory = Bukkit.createInventory(new PrefixMenuHolder(MenuType.FORMAT, segmentId, null, page, availableOnly), 45, this.prefixManager.getFormatMenuTitle(segment));
-        fillBorders(inventory);
-        inventory.setItem(36, createBackItem(player, segment));
-        inventory.setItem(38, this.prefixManager.createConfiguredMenuItem(
-                player,
-                "clear-format",
-                Material.BARRIER,
-                "&cClear format",
-                Arrays.asList("&7Returns the default format.", "", "&eLeft click: clear"),
-                segmentReplacements(player, segment)
-        ));
-        inventory.setItem(40, this.prefixManager.createConfiguredMenuItem(
-                player,
-                "random-format",
-                Material.SUNFLOWER,
-                "&6Random format",
-                Arrays.asList("&7Selects a random available format.", "", "&eLeft click: choose"),
-                segmentReplacements(player, segment)
-        ));
-        inventory.setItem(42, this.prefixManager.createConfiguredMenuItem(
-                player,
-                availableOnly ? "available-toggle-on" : "available-toggle-off",
-                availableOnly ? Material.LIME_DYE : Material.HOPPER,
-                availableOnly ? "&aAvailable only" : "&fAll variants",
-                Arrays.asList(availableOnly ? "&7Unavailable formats are hidden." : "&7All formats are visible.", "", "&eLeft click: toggle"),
-                segmentReplacements(player, segment)
-        ));
-
-        List<FormatDefinition> values = availableOnly
-                ? this.prefixManager.getAvailableFormats(player, segmentId)
-                : getAllFormats(segmentId);
-        fillPagedEntries(inventory, page, values, new EntryRenderer<FormatDefinition>() {
-            @Override
-            public ItemStack render(FormatDefinition value) {
-                return prefixManager.createFormatItem(player, segmentId, value);
-            }
-        });
-        placePageControls(player, inventory, page, values.size());
+        renderMenu(player, inventory, (PrefixMenuHolder) inventory.getHolder(), true);
         player.openInventory(inventory);
     }
 
@@ -176,6 +75,16 @@ public final class PrefixMenuService {
             if (player.getOpenInventory().getTopInventory().getHolder() instanceof PrefixMenuHolder) {
                 player.closeInventory();
             }
+        }
+    }
+
+    public void refreshOpenMenus() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Inventory inventory = player.getOpenInventory().getTopInventory();
+            if (!(inventory.getHolder() instanceof PrefixMenuHolder)) {
+                continue;
+            }
+            renderMenu(player, inventory, (PrefixMenuHolder) inventory.getHolder(), false);
         }
     }
 
@@ -233,6 +142,151 @@ public final class PrefixMenuService {
         }
     }
 
+    private void renderMenu(Player player, Inventory inventory, PrefixMenuHolder holder, boolean initial) {
+        if (initial) {
+            clearMenu(inventory);
+            fillBorders(inventory);
+        }
+        if (holder.getType() == MenuType.MAIN) {
+            renderMainMenu(player, inventory);
+            return;
+        }
+        if (holder.getType() == MenuType.CATEGORY_LIST) {
+            renderCategoryListMenu(player, inventory, holder.getSegmentId(), holder.getPage());
+            return;
+        }
+        if (holder.getType() == MenuType.TEXT) {
+            renderTextMenu(player, inventory, holder.getSegmentId(), holder.getCategoryId(), holder.getPage(), holder.isAvailableOnly());
+            return;
+        }
+        renderFormatMenu(player, inventory, holder.getSegmentId(), holder.getPage(), holder.isAvailableOnly());
+    }
+
+    private void renderMainMenu(Player player, Inventory inventory) {
+        for (TagSegment segment : this.prefixManager.getMainMenuSegments(SegmentSide.PREFIX)) {
+            placeMainSegmentButtons(player, inventory, segment);
+        }
+        setItemIfChanged(inventory, 4, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "preview",
+                Material.BOOK,
+                "&fPreview",
+                Collections.singletonList("%preview%"),
+                previewReplacements(player)
+        ));
+    }
+
+    private void renderCategoryListMenu(Player player, Inventory inventory, String segmentId, int page) {
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (segment == null) {
+            return;
+        }
+        setItemIfChanged(inventory, 36, createBackItem(player, segment));
+        List<PrefixCategory> categories = new ArrayList<PrefixCategory>(this.prefixManager.getCategoriesForSegment(segmentId));
+        fillPagedEntries(inventory, page, categories, new EntryRenderer<PrefixCategory>() {
+            @Override
+            public ItemStack render(PrefixCategory value) {
+                return prefixManager.createCategoryItem(player, value, segmentId);
+            }
+        });
+        placePageControls(player, inventory, page, categories.size());
+    }
+
+    private void renderTextMenu(Player player, Inventory inventory, String segmentId, String categoryId, int page, boolean availableOnly) {
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (segment == null) {
+            return;
+        }
+        setItemIfChanged(inventory, 36, createBackItem(player, segment));
+        setItemIfChanged(inventory, 38, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "clear-text",
+                Material.BARRIER,
+                "&cClear text",
+                Arrays.asList("&7Clears the selected text.", "", "&eLeft click: clear"),
+                segmentReplacements(player, segment)
+        ));
+        setItemIfChanged(inventory, 40, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "random-text",
+                Material.SUNFLOWER,
+                "&6Random text",
+                Arrays.asList("&7Selects a random available text.", "", "&eLeft click: choose"),
+                segmentReplacements(player, segment)
+        ));
+        setItemIfChanged(inventory, 42, this.prefixManager.createConfiguredMenuItem(
+                player,
+                availableOnly ? "available-toggle-on" : "available-toggle-off",
+                availableOnly ? Material.LIME_DYE : Material.HOPPER,
+                availableOnly ? "&aAvailable only" : "&fAll variants",
+                Arrays.asList(availableOnly ? "&7Unavailable variants are hidden." : "&7All variants are visible.", "", "&eLeft click: toggle"),
+                segmentReplacements(player, segment)
+        ));
+
+        List<PrefixDefinition> values = availableOnly
+                ? this.prefixManager.getAvailableDefinitions(player, segmentId)
+                : this.prefixManager.getDefinitionsByCategory(segmentId, categoryId);
+        if (availableOnly) {
+            java.util.Iterator<PrefixDefinition> iterator = values.iterator();
+            while (iterator.hasNext()) {
+                PrefixDefinition definition = iterator.next();
+                if (!definition.getCategoryId().equalsIgnoreCase(categoryId)) {
+                    iterator.remove();
+                }
+            }
+        }
+        fillPagedEntries(inventory, page, values, new EntryRenderer<PrefixDefinition>() {
+            @Override
+            public ItemStack render(PrefixDefinition value) {
+                return prefixManager.createDefinitionItem(player, value);
+            }
+        });
+        placePageControls(player, inventory, page, values.size());
+    }
+
+    private void renderFormatMenu(Player player, Inventory inventory, String segmentId, int page, boolean availableOnly) {
+        TagSegment segment = this.prefixManager.getSegment(segmentId);
+        if (segment == null) {
+            return;
+        }
+        setItemIfChanged(inventory, 36, createBackItem(player, segment));
+        setItemIfChanged(inventory, 38, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "clear-format",
+                Material.BARRIER,
+                "&cClear format",
+                Arrays.asList("&7Returns the default format.", "", "&eLeft click: clear"),
+                segmentReplacements(player, segment)
+        ));
+        setItemIfChanged(inventory, 40, this.prefixManager.createConfiguredMenuItem(
+                player,
+                "random-format",
+                Material.SUNFLOWER,
+                "&6Random format",
+                Arrays.asList("&7Selects a random available format.", "", "&eLeft click: choose"),
+                segmentReplacements(player, segment)
+        ));
+        setItemIfChanged(inventory, 42, this.prefixManager.createConfiguredMenuItem(
+                player,
+                availableOnly ? "available-toggle-on" : "available-toggle-off",
+                availableOnly ? Material.LIME_DYE : Material.HOPPER,
+                availableOnly ? "&aAvailable only" : "&fAll variants",
+                Arrays.asList(availableOnly ? "&7Unavailable formats are hidden." : "&7All formats are visible.", "", "&eLeft click: toggle"),
+                segmentReplacements(player, segment)
+        ));
+
+        List<FormatDefinition> values = availableOnly
+                ? this.prefixManager.getAvailableFormats(player, segmentId)
+                : getAllFormats(segmentId);
+        fillPagedEntries(inventory, page, values, new EntryRenderer<FormatDefinition>() {
+            @Override
+            public ItemStack render(FormatDefinition value) {
+                return prefixManager.createFormatItem(player, segmentId, value);
+            }
+        });
+        placePageControls(player, inventory, page, values.size());
+    }
+
     private void placeMainSegmentButtons(Player player, Inventory inventory, TagSegment segment) {
         PrefixDefinition activeText = this.prefixManager.getActiveText(player, segment.getId());
         FormatDefinition activeFormat = this.prefixManager.getActiveFormat(player, segment.getId());
@@ -247,7 +301,7 @@ public final class PrefixMenuService {
             replacements.put("%toggle_state%", this.prefixManager.getMenuString(visible ? "toggle-state-visible" : "toggle-state-hidden", visible ? "&aVisible" : "&cHidden"));
             replacements.put("%toggle_action%", this.prefixManager.getMenuString(visible ? "toggle-action-hide" : "toggle-action-show", visible ? "&eLeft click: hide" : "&eLeft click: show"));
             if (segment.hasCustomButtonAppearance()) {
-                inventory.setItem(segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+                setItemIfChanged(inventory, segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
                         player,
                         "__unused_segment_toggle_button__",
                         segment.getButtonMaterialSpec(),
@@ -260,7 +314,7 @@ public final class PrefixMenuService {
                         segment.getLore()
                 ));
             } else {
-                inventory.setItem(segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+                setItemIfChanged(inventory, segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
                         player,
                         "segment-toggle-button",
                         segment.getButtonMaterialSpec(),
@@ -274,7 +328,7 @@ public final class PrefixMenuService {
             return;
         }
         if (segment.hasCustomButtonAppearance()) {
-            inventory.setItem(segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+            setItemIfChanged(inventory, segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
                     player,
                     "__unused_segment_text_button__",
                     segment.getButtonMaterialSpec(),
@@ -287,7 +341,7 @@ public final class PrefixMenuService {
                     segment.getLore()
             ));
         } else {
-            inventory.setItem(segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+            setItemIfChanged(inventory, segment.getMenuSlot(), this.prefixManager.createConfiguredMenuItem(
                     player,
                     "segment-text-button",
                     segment.getButtonMaterialSpec(),
@@ -299,7 +353,7 @@ public final class PrefixMenuService {
             ));
         }
         if (segment.hasCustomFormatButtonAppearance()) {
-            inventory.setItem(segment.getFormatMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+            setItemIfChanged(inventory, segment.getFormatMenuSlot(), this.prefixManager.createConfiguredMenuItem(
                     player,
                     "__unused_segment_format_button__",
                     segment.getFormatButtonMaterialSpec(),
@@ -312,7 +366,7 @@ public final class PrefixMenuService {
                     segment.getLore()
             ));
         } else {
-            inventory.setItem(segment.getFormatMenuSlot(), this.prefixManager.createConfiguredMenuItem(
+            setItemIfChanged(inventory, segment.getFormatMenuSlot(), this.prefixManager.createConfiguredMenuItem(
                     player,
                     "segment-format-button",
                     segment.getFormatButtonMaterialSpec(),
@@ -508,8 +562,14 @@ public final class PrefixMenuService {
         );
         for (int i = 0; i < inventory.getSize(); i++) {
             if (i < 9 || i >= 36 || i % 9 == 0 || i % 9 == 8) {
-                inventory.setItem(i, filler);
+                setItemIfChanged(inventory, i, filler);
             }
+        }
+    }
+
+    private void clearMenu(Inventory inventory) {
+        for (int i = 0; i < inventory.getSize(); i++) {
+            inventory.setItem(i, null);
         }
     }
 
@@ -520,7 +580,10 @@ public final class PrefixMenuService {
             if (index >= values.size()) {
                 break;
             }
-            inventory.setItem(this.entrySlots.get(i), render(renderer, values.get(index)));
+            setItemIfChanged(inventory, this.entrySlots.get(i), render(renderer, values.get(index)));
+        }
+        for (int i = Math.max(0, values.size() - start); i < PAGE_SIZE; i++) {
+            setItemIfChanged(inventory, this.entrySlots.get(i), null);
         }
     }
 
@@ -536,7 +599,7 @@ public final class PrefixMenuService {
         replacements.put("%max_page%", String.valueOf(maxPage + 1));
         replacements.put("%previous_page%", String.valueOf(page));
         replacements.put("%next_page%", String.valueOf(page + 2));
-        inventory.setItem(41, this.prefixManager.createConfiguredMenuItem(
+        setItemIfChanged(inventory, 41, this.prefixManager.createConfiguredMenuItem(
                 player,
                 "page-info",
                 Material.BOOK,
@@ -545,7 +608,7 @@ public final class PrefixMenuService {
                 replacements
         ));
         if (page > 0) {
-            inventory.setItem(37, this.prefixManager.createConfiguredMenuItem(
+            setItemIfChanged(inventory, 37, this.prefixManager.createConfiguredMenuItem(
                     player,
                     "previous-page",
                     Material.ARROW,
@@ -553,9 +616,11 @@ public final class PrefixMenuService {
                     Arrays.asList("&7Return to page %previous_page%.", "", "&eLeft click: back"),
                     replacements
             ));
+        } else {
+            setItemIfChanged(inventory, 37, null);
         }
         if (hasNextPage(totalEntries, page)) {
-            inventory.setItem(43, this.prefixManager.createConfiguredMenuItem(
+            setItemIfChanged(inventory, 43, this.prefixManager.createConfiguredMenuItem(
                     player,
                     "next-page",
                     Material.ARROW,
@@ -563,6 +628,8 @@ public final class PrefixMenuService {
                     Arrays.asList("&7Go to page %next_page%.", "", "&eLeft click: next"),
                     replacements
             ));
+        } else {
+            setItemIfChanged(inventory, 43, null);
         }
     }
 
@@ -576,6 +643,39 @@ public final class PrefixMenuService {
             return -1;
         }
         return page * PAGE_SIZE + slotIndex;
+    }
+
+    private void setItemIfChanged(Inventory inventory, int slot, ItemStack item) {
+        ItemStack current = inventory.getItem(slot);
+        if (current == null && item == null) {
+            return;
+        }
+        if (current != null && item != null && current.getType() == item.getType() && current.getAmount() == item.getAmount() && current.getType() == Material.PLAYER_HEAD) {
+            if (!current.isSimilar(item)) {
+                updateHeadPresentation(current, item);
+            }
+            return;
+        }
+        if (current != null && item != null && current.getAmount() == item.getAmount() && current.isSimilar(item)) {
+            return;
+        }
+        inventory.setItem(slot, item);
+    }
+
+    private void updateHeadPresentation(ItemStack current, ItemStack updated) {
+        ItemMeta currentMeta = current.getItemMeta();
+        ItemMeta updatedMeta = updated.getItemMeta();
+        if (currentMeta == null || updatedMeta == null) {
+            return;
+        }
+        currentMeta.setDisplayName(updatedMeta.getDisplayName());
+        currentMeta.setLore(updatedMeta.getLore());
+        if (updatedMeta.hasCustomModelData()) {
+            currentMeta.setCustomModelData(updatedMeta.getCustomModelData());
+        } else if (currentMeta.hasCustomModelData()) {
+            currentMeta.setCustomModelData(null);
+        }
+        current.setItemMeta(currentMeta);
     }
 
     private interface EntryRenderer<T> {

@@ -11,12 +11,14 @@ import net.enelson.sopprefix.prefix.PrefixManager;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 public final class SopPrefixPlugin extends JavaPlugin {
 
     private PrefixManager prefixManager;
     private PrefixMenuService prefixMenuService;
     private SuffixMenuService suffixMenuService;
+    private BukkitTask menuAnimationTask;
 
     @Override
     public void onEnable() {
@@ -49,10 +51,22 @@ public final class SopPrefixPlugin extends JavaPlugin {
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             new SopPrefixPlaceholders(this.prefixManager).register();
         }
+
+        this.menuAnimationTask = getServer().getScheduler().runTaskTimer(this, new Runnable() {
+            @Override
+            public void run() {
+                prefixMenuService.refreshOpenMenus();
+                suffixMenuService.refreshOpenMenus();
+            }
+        }, 1L, 1L);
     }
 
     @Override
     public void onDisable() {
+        if (this.menuAnimationTask != null) {
+            this.menuAnimationTask.cancel();
+            this.menuAnimationTask = null;
+        }
         if (this.prefixMenuService != null) {
             this.prefixMenuService.closeAll();
         }
