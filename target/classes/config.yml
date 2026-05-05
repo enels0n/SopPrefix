@@ -14,9 +14,9 @@ settings:
     table-prefix: 'sopprefix_'
     host: '127.0.0.1'
     port: 3306
-    database: '********'
-    username: '********'
-    password: '********'
+    database: 'database'
+    username: 'root'
+    password: 'password'
     pool-name: 'SopPrefix'
     maximum-pool-size: 10
     minimum-idle: 2

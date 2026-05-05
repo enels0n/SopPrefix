@@ -20,6 +20,7 @@ net\enelson\sopprefix\prefix\PrefixDatabaseStorage.class
 net\enelson\sopprefix\prefix\FormatDefinition.class
 net\enelson\sopprefix\prefix\PrefixDefinition.class
 net\enelson\sopprefix\gui\PrefixMenuService$1.class
+net\enelson\sopprefix\hook\SopEmojisHook.class
 net\enelson\sopprefix\util\Text.class
 net\enelson\sopprefix\gui\MenuType.class
 net\enelson\sopprefix\gui\SuffixMenuService.class

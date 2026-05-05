@@ -409,7 +409,7 @@ public final class PrefixManager implements Listener {
             return resolveSystemRawValue(player, segment);
         }
         PrefixDefinition definition = getActiveText(player, segmentId);
-        return definition == null ? "" : definition.getValue();
+        return definition == null ? "" : definition.resolveValue(getAnimationTick());
     }
 
     public String getActiveId(Player player, String segmentId) {
@@ -732,11 +732,13 @@ public final class PrefixManager implements Listener {
                     id.toLowerCase(),
                     segment.getId(),
                     definitionSection.getString("display-name", id),
-                    definitionSection.getString("value", id),
+                    definitionSection.getString("value", definitionSection.getStringList("frames").isEmpty() ? id : definitionSection.getStringList("frames").get(0)),
                     categoryId,
                     definitionSection.getString("material", Material.PAPER.name()),
                     definitionSection.getString("permission", ""),
-                    definitionSection.getStringList("lore")
+                    definitionSection.getStringList("lore"),
+                    definitionSection.getStringList("frames"),
+                    definitionSection.getStringList("frames").isEmpty() ? 0 : Math.max(1, definitionSection.getInt("interval-ticks", 5))
             ));
         }
     }
@@ -768,10 +770,12 @@ public final class PrefixManager implements Listener {
                     id.toLowerCase(),
                     segment.getId(),
                     formatSection.getString("display-name", id),
-                    formatSection.getString("format", "%value%"),
+                    formatSection.getString("format", formatSection.getStringList("frames").isEmpty() ? "%value%" : formatSection.getStringList("frames").get(0)),
                     formatSection.getString("material", Material.NAME_TAG.name()),
                     formatSection.getString("permission", ""),
-                    formatSection.getStringList("lore")
+                    formatSection.getStringList("lore"),
+                    formatSection.getStringList("frames"),
+                    formatSection.getStringList("frames").isEmpty() ? 0 : Math.max(1, formatSection.getInt("interval-ticks", 5))
             ));
         }
     }
@@ -1085,7 +1089,7 @@ public final class PrefixManager implements Listener {
             return "";
         }
         FormatDefinition format = overrideFormat != null ? overrideFormat : getActiveFormat(player, segment.getId());
-        return applyFormat(player, segment, format, definition.getValue());
+        return applyFormat(player, segment, format, definition.resolveValue(getAnimationTick()));
     }
 
     private String resolveSystemRawValue(Player player, TagSegment segment) {
@@ -1099,9 +1103,13 @@ public final class PrefixManager implements Listener {
     }
 
     private String applyFormat(Player player, TagSegment segment, FormatDefinition definition, String value) {
-        String template = definition == null ? segment.getDefaultFormat() : definition.getFormat();
+        String template = definition == null ? segment.getDefaultFormat() : definition.resolveFormat(getAnimationTick());
         String rendered = template.replace("%value%", value == null ? "" : value);
         return Text.color(SopEmojisHook.apply(player, rendered));
+    }
+
+    private long getAnimationTick() {
+        return System.currentTimeMillis() / 50L;
     }
 
     private String resolvePlaceholders(Player player, String input) {

@@ -8,6 +8,7 @@ import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -64,6 +65,8 @@ final class PrefixDatabaseStorage {
                 + "id VARCHAR(191) NOT NULL,"
                 + "display_name TEXT NOT NULL,"
                 + "value_text TEXT NOT NULL,"
+                + "frames_text LONGTEXT NULL,"
+                + "interval_ticks INT NOT NULL DEFAULT 0,"
                 + "category_id VARCHAR(191) NOT NULL,"
                 + "material VARCHAR(255) NOT NULL,"
                 + "permission VARCHAR(255) NOT NULL,"
@@ -76,11 +79,18 @@ final class PrefixDatabaseStorage {
                 + "id VARCHAR(191) NOT NULL,"
                 + "display_name TEXT NOT NULL,"
                 + "format_text TEXT NOT NULL,"
+                + "frames_text LONGTEXT NULL,"
+                + "interval_ticks INT NOT NULL DEFAULT 0,"
                 + "material VARCHAR(255) NOT NULL,"
                 + "permission VARCHAR(255) NOT NULL,"
                 + "lore TEXT NULL,"
                 + "PRIMARY KEY (segment_id, id)"
                 + ") CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+
+        ensureColumn("definitions", "frames_text", "ALTER TABLE " + table("definitions") + " ADD COLUMN frames_text LONGTEXT NULL");
+        ensureColumn("definitions", "interval_ticks", "ALTER TABLE " + table("definitions") + " ADD COLUMN interval_ticks INT NOT NULL DEFAULT 0");
+        ensureColumn("formats", "frames_text", "ALTER TABLE " + table("formats") + " ADD COLUMN frames_text LONGTEXT NULL");
+        ensureColumn("formats", "interval_ticks", "ALTER TABLE " + table("formats") + " ADD COLUMN interval_ticks INT NOT NULL DEFAULT 0");
     }
 
     void syncFromConfig(List<TagSegment> editableSegments) throws SQLException {
@@ -122,7 +132,7 @@ final class PrefixDatabaseStorage {
             ResultSet resultSet = null;
             List<PrefixDefinition> result = new ArrayList<PrefixDefinition>();
             try {
-                statement = connection.prepareStatement("SELECT id, display_name, value_text, category_id, material, permission, lore "
+                statement = connection.prepareStatement("SELECT id, display_name, value_text, frames_text, interval_ticks, category_id, material, permission, lore "
                         + "FROM " + table("definitions") + " WHERE segment_id = ? ORDER BY id ASC");
                 statement.setString(1, segment.getId());
                 resultSet = statement.executeQuery();
@@ -135,7 +145,9 @@ final class PrefixDatabaseStorage {
                             resultSet.getString("category_id").toLowerCase(),
                             resultSet.getString("material"),
                             resultSet.getString("permission"),
-                            deserializeLore(resultSet.getString("lore"))
+                            deserializeLore(resultSet.getString("lore")),
+                            deserializeLore(resultSet.getString("frames_text")),
+                            resultSet.getInt("interval_ticks")
                     ));
                 }
                 return result;
@@ -152,7 +164,7 @@ final class PrefixDatabaseStorage {
             ResultSet resultSet = null;
             List<FormatDefinition> result = new ArrayList<FormatDefinition>();
             try {
-                statement = connection.prepareStatement("SELECT id, display_name, format_text, material, permission, lore "
+                statement = connection.prepareStatement("SELECT id, display_name, format_text, frames_text, interval_ticks, material, permission, lore "
                         + "FROM " + table("formats") + " WHERE segment_id = ? ORDER BY id ASC");
                 statement.setString(1, segment.getId());
                 resultSet = statement.executeQuery();
@@ -164,7 +176,9 @@ final class PrefixDatabaseStorage {
                             resultSet.getString("format_text"),
                             resultSet.getString("material"),
                             resultSet.getString("permission"),
-                            deserializeLore(resultSet.getString("lore"))
+                            deserializeLore(resultSet.getString("lore")),
+                            deserializeLore(resultSet.getString("frames_text")),
+                            resultSet.getInt("interval_ticks")
                     ));
                 }
                 return result;
@@ -217,21 +231,25 @@ final class PrefixDatabaseStorage {
             PreparedStatement statement = null;
             try {
                 statement = connection.prepareStatement("INSERT INTO " + table("definitions")
-                        + " (segment_id, id, display_name, value_text, category_id, material, permission, lore) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-                        + "ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), value_text = VALUES(value_text), category_id = VALUES(category_id), material = VALUES(material), permission = VALUES(permission), lore = VALUES(lore)");
+                        + " (segment_id, id, display_name, value_text, frames_text, interval_ticks, category_id, material, permission, lore) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        + "ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), value_text = VALUES(value_text), frames_text = VALUES(frames_text), interval_ticks = VALUES(interval_ticks), category_id = VALUES(category_id), material = VALUES(material), permission = VALUES(permission), lore = VALUES(lore)");
                 for (String id : section.getKeys(false)) {
                     ConfigurationSection definitionSection = section.getConfigurationSection(id);
                     if (definitionSection == null) {
                         continue;
                     }
+                    List<String> frames = definitionSection.getStringList("frames");
+                    int intervalTicks = frames.isEmpty() ? 0 : Math.max(1, definitionSection.getInt("interval-ticks", 5));
                     statement.setString(1, segment.getId());
                     statement.setString(2, id.toLowerCase());
                     statement.setString(3, definitionSection.getString("display-name", id));
-                    statement.setString(4, definitionSection.getString("value", id));
-                    statement.setString(5, definitionSection.getString("category", "common").toLowerCase());
-                    statement.setString(6, definitionSection.getString("material", Material.PAPER.name()));
-                    statement.setString(7, definitionSection.getString("permission", ""));
-                    statement.setString(8, serializeLore(definitionSection.getStringList("lore")));
+                    statement.setString(4, definitionSection.getString("value", frames.isEmpty() ? id : frames.get(0)));
+                    statement.setString(5, serializeLore(frames));
+                    statement.setInt(6, intervalTicks);
+                    statement.setString(7, definitionSection.getString("category", "common").toLowerCase());
+                    statement.setString(8, definitionSection.getString("material", Material.PAPER.name()));
+                    statement.setString(9, definitionSection.getString("permission", ""));
+                    statement.setString(10, serializeLore(definitionSection.getStringList("lore")));
                     statement.addBatch();
                 }
                 statement.executeBatch();
@@ -253,20 +271,24 @@ final class PrefixDatabaseStorage {
             PreparedStatement statement = null;
             try {
                 statement = connection.prepareStatement("INSERT INTO " + table("formats")
-                        + " (segment_id, id, display_name, format_text, material, permission, lore) VALUES (?, ?, ?, ?, ?, ?, ?) "
-                        + "ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), format_text = VALUES(format_text), material = VALUES(material), permission = VALUES(permission), lore = VALUES(lore)");
+                        + " (segment_id, id, display_name, format_text, frames_text, interval_ticks, material, permission, lore) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        + "ON DUPLICATE KEY UPDATE display_name = VALUES(display_name), format_text = VALUES(format_text), frames_text = VALUES(frames_text), interval_ticks = VALUES(interval_ticks), material = VALUES(material), permission = VALUES(permission), lore = VALUES(lore)");
                 for (String id : section.getKeys(false)) {
                     ConfigurationSection formatSection = section.getConfigurationSection(id);
                     if (formatSection == null) {
                         continue;
                     }
+                    List<String> frames = formatSection.getStringList("frames");
+                    int intervalTicks = frames.isEmpty() ? 0 : Math.max(1, formatSection.getInt("interval-ticks", 5));
                     statement.setString(1, segment.getId());
                     statement.setString(2, id.toLowerCase());
                     statement.setString(3, formatSection.getString("display-name", id));
-                    statement.setString(4, formatSection.getString("format", "%value%"));
-                    statement.setString(5, formatSection.getString("material", Material.NAME_TAG.name()));
-                    statement.setString(6, formatSection.getString("permission", ""));
-                    statement.setString(7, serializeLore(formatSection.getStringList("lore")));
+                    statement.setString(4, formatSection.getString("format", frames.isEmpty() ? "%value%" : frames.get(0)));
+                    statement.setString(5, serializeLore(frames));
+                    statement.setInt(6, intervalTicks);
+                    statement.setString(7, formatSection.getString("material", Material.NAME_TAG.name()));
+                    statement.setString(8, formatSection.getString("permission", ""));
+                    statement.setString(9, serializeLore(formatSection.getStringList("lore")));
                     statement.addBatch();
                 }
                 statement.executeBatch();
@@ -280,6 +302,33 @@ final class PrefixDatabaseStorage {
         return tablePrefix + suffix;
     }
 
+    private void ensureColumn(final String tableSuffix, final String columnName, final String alterSql) throws SQLException {
+        database.withConnection(connection -> {
+            if (hasColumn(connection, table(tableSuffix), columnName)) {
+                return;
+            }
+
+            PreparedStatement statement = null;
+            try {
+                statement = connection.prepareStatement(alterSql);
+                statement.execute();
+            } finally {
+                closeQuietly(statement);
+            }
+        });
+    }
+
+    private boolean hasColumn(Connection connection, String tableName, String columnName) throws SQLException {
+        DatabaseMetaData metaData = connection.getMetaData();
+        ResultSet resultSet = null;
+        try {
+            resultSet = metaData.getColumns(connection.getCatalog(), null, tableName, columnName);
+            return resultSet.next();
+        } finally {
+            closeQuietly(resultSet);
+        }
+    }
+
     private String serializeLore(List<String> lore) {
         if (lore == null || lore.isEmpty()) {
             return "";
@@ -291,9 +340,11 @@ final class PrefixDatabaseStorage {
         if (lore == null || lore.isEmpty()) {
             return Collections.emptyList();
         }
-        String[] split = lore.split("\n", -1);
+        String[] split = lore.split("\\r?\\n", -1);
         List<String> result = new ArrayList<String>(split.length);
-        Collections.addAll(result, split);
+        for (String line : split) {
+            result.add(line.replace("\r", ""));
+        }
         return result;
     }
 
